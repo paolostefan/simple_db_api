@@ -1,9 +1,14 @@
 [database]
-user=reader
-password=_R34d3r!!
-database=fidelityhouse
-server=localhost
+user=my_db_user
+password=my_super_secret_password
+database=my_database
+; server is optional, default = 127.0.0.1
+server=127.0.0.1
+; port is optional, default = 3306
+port=3306
 
 [web]
+; port is optional, default = 8080
 port=8080
+; hostname is optional, default = localhost
 hostname=localhost
