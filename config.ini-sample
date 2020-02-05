@@ -1,0 +1,9 @@
+[database]
+user=reader
+password=_R34d3r!!
+database=fidelityhouse
+server=localhost
+
+[web]
+port=8080
+hostname=localhost

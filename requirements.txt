@@ -1,0 +1,4 @@
+dnspython
+mysql-connector-python
+protobuf
+six
