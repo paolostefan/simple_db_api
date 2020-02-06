@@ -1,4 +1,4 @@
 dnspython
 mysql-connector-python
-protobuf
+protobuf==3.6.1
 six
