@@ -31,6 +31,7 @@ stop)
           echo "Pid file not found - shutdown not needed"
         else
           kill "$(cat "${PID_FILE}")"
+          rm ${PID_FILE}
         fi
         ;;
 restart)
