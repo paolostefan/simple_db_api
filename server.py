@@ -1,6 +1,9 @@
 import configparser
 import json
 import os
+import re
+import sys
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
 from datetime import date, datetime
@@ -14,49 +17,6 @@ def json_serialize_datetime(obj):
         return obj.isoformat()
 
     raise TypeError(f"Type {type(obj)} is not serializable")
-
-
-class ApiReqHandler(BaseHTTPRequestHandler):
-
-    @staticmethod
-    def get_table_name(path: str):
-        if '/' not in path:
-            return path
-
-        if path[0] == '/':
-            path = path[1:]
-
-        if "/" in path:
-            path = path[0:path.find('/')]
-
-        return path
-
-    def do_GET(self):
-        url = self.path
-        parsed = urlparse(url)
-        table_name = self.get_table_name(parsed.path)
-        parameters = parse_qs(parsed.query) if parsed.query else {}
-
-        response = dict()
-        status_code = 500  # pessimismo
-        try:
-            if not table_name:
-                response['error'] = 'Please specify a non-null path'
-                status_code = 400
-            else:
-                response['results'] = self.server.do_query(table_name, parameters)
-                status_code = 200
-        except ProgrammingError as e:
-            response['error'] = e.msg
-            response['errno'] = e.errno
-            response['sqlstate'] = e.sqlstate
-        except Exception as e:
-            response['error'] = str(e)
-
-        self.send_response(status_code)
-        self.send_header("Content-type", "application/json")
-        self.end_headers()
-        self.wfile.write(bytes(json.dumps(response, default=json_serialize_datetime), "utf-8"))
 
 
 OPERATORS = {
@@ -91,6 +51,58 @@ def parse_sql_filter(sql_filter: str) -> str:
         return f"`{col}` {OPERATORS[operator]} '{value}'"
 
 
+def extract_table_name_from(path: str):
+    """
+    Turns /table_name`+with+malicious+code+`/or/other/useless/path/elements into 'table_name'.
+
+    :param path:
+    :return:
+    """
+    if path[0] == '/':
+        path = path[1:]
+
+    if "/" in path:
+        path = path[0:path.find('/')]
+
+    if '`' in path:
+        path = path[0:path.find('`')]
+
+    return re.sub(r'[\W]+', '', path)
+
+
+class ApiReqHandler(BaseHTTPRequestHandler):
+    """
+    Handler for HTTP requests
+    """
+
+    def do_GET(self):
+        url = self.path
+        parsed = urlparse(url)
+        table_name = extract_table_name_from(parsed.path)
+        parameters = parse_qs(parsed.query) if parsed.query else {}
+
+        response = dict()
+        status_code = 500  # pessimistic default
+        try:
+            if not table_name:
+                response['error'] = 'Please specify a non-null path'
+                status_code = 400
+            else:
+                response['results'] = self.server.do_query(table_name, parameters)
+                status_code = 200
+        except ProgrammingError as e:
+            response['error'] = e.msg
+            response['errno'] = e.errno
+            response['sqlstate'] = e.sqlstate
+        except Exception as e:
+            response['error'] = str(e)
+
+        self.send_response(status_code)
+        self.send_header("Content-type", "application/json")
+        self.end_headers()
+        self.wfile.write(bytes(json.dumps(response, default=json_serialize_datetime), "utf-8"))
+
+
 class ApiWebServer(HTTPServer):
     cnx = None
     config = None
@@ -99,6 +111,7 @@ class ApiWebServer(HTTPServer):
     def __init__(self):
         """
         Read configuration file (./config.ini) and setup custom web handler.
+        Don't start the webserver yet.
         """
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -170,21 +183,48 @@ class ApiWebServer(HTTPServer):
         try:
             self.cnx = mysql.connector.connect(**db_conf)
         except Exception as e:
-            print(e)
+            self.log_message(e)
             exit(1)
-        print(f"Established connection to db {db_conf['host']}:{db_conf['port']}/{db_conf['database']}")
+        self.log_message(f"Established connection to db {db_conf['host']}:{db_conf['port']}/{db_conf['database']}")
 
         try:
-            print(f"Server started at http://{self.server_name}:{self.server_port}")
+            self.log_message(f"Server started at http://{self.server_name}:{self.server_port}")
             self.serve_forever()
         except KeyboardInterrupt:
             pass
 
-        print("Closing database connection...")
+        self.log_message("Closing database connection...")
         self.cnx.close()
-        print("Stopping webserver...")
+
+        self.log_message("Stopping webserver...")
         self.server_close()
-        print("Server stopped.")
+
+        self.log_message("Server stopped.")
+
+    @staticmethod
+    def log_date_time_string():
+        """Return the current time formatted for logging."""
+        now = time.time()
+        year, month, day, hh, mm, ss, x, y, z = time.localtime(now)
+        return f"{day:02}/{month:02}/{year:04} {hh:02}:{mm:02}:{ss:02}"
+
+    def log_message(self, format_str, *args):
+        """
+        Log an arbitrary message.
+
+        Copied almost bit-to-bit from http.server.BaseHTTPRequestHandler.log_message
+
+        The first argument, FORMAT, is a format string for the
+        message to be logged.  If the format string contains
+        any % escapes requiring parameters, they should be
+        specified as subsequent arguments (it's just like
+        printf!).
+
+        The client ip and current date/time are prefixed to
+        every message.
+        """
+
+        sys.stderr.write(f"{self.server_name} [{self.log_date_time_string()}] {format_str % args}\n")
 
 
 if __name__ == '__main__':
