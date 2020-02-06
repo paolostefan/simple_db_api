@@ -102,7 +102,7 @@ class ApiWebServer(HTTPServer):
         """
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-        config = configparser.ConfigParser()
+        config = configparser.RawConfigParser()
         config.read(os.path.join(BASE_DIR, 'config.ini'))
 
         hostname = config.get('web', 'hostname', fallback='localhost')
