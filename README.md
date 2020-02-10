@@ -17,25 +17,25 @@ making it possible to query the tables of the configured database. For security 
 
 1. Clone the repo and cd into it
 
-2. Create a python3 virtualenv 
+2. Create a python3 virtual envinronment:
 
     ```
-   python3 -m virtualenv venv -p python3
+   python3 -m virtualenv -p python3 venv 
     ```
    
-   If you don't have **virtualenv** installed, you may need to run `sudo apt install python3-virtualenv` 
-   (on Debian/Ubuntu or Debian-based distros) or the corresponding command to install it. 
+   **Please note**: if you don't have **virtualenv** installed, the above command will fail.
+   To install virtualenv,on Debian/Ubuntu or Debian-based distros you can run `sudo apt install python3-virtualenv`; 
+   other OSes and distros may need a different command. 
    
 
-3. Activate the virtualenv and install required packages
+3. Activate the virtual environment and _then_ install the required packages:
 
     ```
    source venv/bin/activate
    pip install -m requirements.txt
     ```
 
-
-2. Create a config.ini file, preferably by copying the sample file provided:
+2. Create a **config.ini** file, preferably by copying the sample file provided:
 
     `cp ./config.ini-sample ./config.ini`
 
@@ -54,11 +54,20 @@ and you'll be ready to query the underlying database.
 
 ### Install simple_db_api.sh as a service
 
-If you need to make these changes permanent (i.e. have the **simple_db_api** web server start at boot), 
-you can use the [etc/init.d/simple_db_api.sh](etc/init.d/simple_db_api.sh) **as a starting point**.
-It is a script that can be read by systemd, but it has not been tested 
+To have the **simple_db_api** web server start at boot, an init script must be configured on your machine.
+The [etc/init.d/simple_db_api.sh](etc/init.d/simple_db_api.sh) is provided just **as a starting point** for Linux systems
+using **systemd** (i.e. Debian >= 9, Ubuntu >= 16.04 and similar).
+
 
 ## Endpoint format
+
+### Index: table list
+
+```
+GET / --> returns all the tables in the database
+```
+
+### Select queries
 
 Select queries are done using GET requests and table names as full URL, e.g:
 

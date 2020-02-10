@@ -4,9 +4,9 @@ import os
 import re
 import sys
 import time
+from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
-from datetime import date, datetime
 
 import mysql.connector
 from mysql.connector import ProgrammingError
@@ -78,18 +78,22 @@ class ApiReqHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         url = self.path
         parsed = urlparse(url)
-        table_name = extract_table_name_from(parsed.path)
-        parameters = parse_qs(parsed.query) if parsed.query else {}
 
         response = dict()
         status_code = 500  # pessimistic default
         try:
-            if not table_name:
-                response['error'] = 'Please specify a non-null path'
-                status_code = 400
-            else:
-                response['results'] = self.server.do_query(table_name, parameters)
+            if parsed.path == '/':
+                response['results'] = self.server.get_table_names()
                 status_code = 200
+            else:
+                table_name = extract_table_name_from(parsed.path)
+                parameters = parse_qs(parsed.query) if parsed.query else {}
+                if not table_name:
+                    response['error'] = 'Please specify a table name'
+                    status_code = 400
+                else:
+                    response['results'] = self.server.do_query(table_name, parameters)
+                    status_code = 200
         except ProgrammingError as e:
             response['error'] = e.msg
             response['errno'] = e.errno
@@ -111,12 +115,16 @@ class ApiWebServer(HTTPServer):
     def __init__(self):
         """
         Read configuration file (./config.ini) and setup custom web handler.
-        Don't start the webserver yet.
+        Don't start the web server yet.
         """
-        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(base_dir, 'config.ini')
+        if not os.path.isfile(config_path):
+            print(f"*** FATAL: config file not found. Please create one at '{config_path}'")
+            exit(1)
 
         config = configparser.RawConfigParser()
-        config.read(os.path.join(BASE_DIR, 'config.ini'))
+        config.read(config_path)
 
         hostname = config.get('web', 'hostname', fallback='localhost')
         port = config.getint('web', 'port', fallback=8080)
@@ -134,7 +142,38 @@ class ApiWebServer(HTTPServer):
 
         super(ApiWebServer, self).__init__((hostname, port), ApiReqHandler)
 
+    def connect_db(self, db_options):
+        # https://dev.mysql.com/doc/connector-python/en/connector-python-example-connecting.html
+
+        try:
+            self.cnx = mysql.connector.connect(**db_options)
+        except Exception as e:
+            self.log_message("Cannot connect to {}:{} MySQL db: {}", db_options['host'], db_options['port'], e)
+            raise e
+
+        self.log_message(
+            f"Established connection to db {db_options['host']}:{db_options['port']}/{db_options['database']}")
+        return self.cnx
+
+    def get_table_names(self):
+
+        if not self.cnx or not self.cnx.is_connected():
+            self.connect_db(self.db_options)
+
+        cursor = self.cnx.cursor()
+        cursor.execute("SHOW TABLES;")
+        raw_results = cursor.fetchall()
+        cursor.close()
+
+        # Turn list-like rows into flat strings
+        results = [row[0] for row in raw_results]
+        return results
+
     def do_query(self, table_name, params):
+
+        if not self.cnx or not self.cnx.is_connected():
+            self.connect_db(self.db_options)
+
         cursor = self.cnx.cursor()
         where_clause = '1'
 
@@ -175,18 +214,9 @@ class ApiWebServer(HTTPServer):
 
     def start(self):
         """
-        Connect to the db and start web server
+        Start the web server. Don't connect to the db yet.
         :return:
         """
-        db_conf = self.db_options
-        # https://dev.mysql.com/doc/connector-python/en/connector-python-example-connecting.html
-        try:
-            self.cnx = mysql.connector.connect(**db_conf)
-        except Exception as e:
-            self.log_message(e)
-            exit(1)
-        self.log_message(f"Established connection to db {db_conf['host']}:{db_conf['port']}/{db_conf['database']}")
-
         try:
             self.log_message(f"Server started at http://{self.server_name}:{self.server_port}")
             self.serve_forever()
