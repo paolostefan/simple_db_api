@@ -98,6 +98,7 @@ class ApiReqHandler(BaseHTTPRequestHandler):
             response['error'] = e.msg
             response['errno'] = e.errno
             response['sqlstate'] = e.sqlstate
+            response['query'] = self.server.last_query
         except Exception as e:
             response['error'] = str(e)
 
@@ -111,6 +112,7 @@ class ApiWebServer(HTTPServer):
     cnx = None
     config = None
     db_options = None
+    last_query = None
 
     def __init__(self):
         """
@@ -200,7 +202,7 @@ class ApiWebServer(HTTPServer):
         limit = params['limit'][0] if 'limit' in params else 20
         limit_clause = f"LIMIT {offset}, {limit}"
 
-        query = f"SELECT * FROM `{table_name}` WHERE {where_clause} {order_clause} {limit_clause}"
+        query = self.last_query = f"SELECT * FROM `{table_name}` WHERE {where_clause} {order_clause} {limit_clause}"
 
         cursor.execute(query)
         raw_results = cursor.fetchall()
