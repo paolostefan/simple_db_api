@@ -92,7 +92,7 @@ class ApiReqHandler(BaseHTTPRequestHandler):
                     response['error'] = 'Please specify a table name'
                     status_code = 400
                 else:
-                    response['results'] = self.server.do_query(table_name, parameters)
+                    response['query'], response['results'] = self.server.do_query(table_name, parameters)
                     status_code = 200
         except ProgrammingError as e:
             response['error'] = e.msg
@@ -210,7 +210,7 @@ class ApiWebServer(HTTPServer):
         # Turn list-like rows into dicts
         results = [dict(zip(columns, row)) for row in raw_results]
 
-        return results
+        return query, results
 
     def start(self):
         """
