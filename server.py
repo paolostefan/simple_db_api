@@ -149,8 +149,12 @@ class ApiWebServer(HTTPServer):
 
         try:
             self.cnx = mysql.connector.connect(**db_options)
+        except ProgrammingError as e:
+            self.log_message("Cannot connect to %s:%d MySQL db: %s; SQLSTATE %s; ERRNO %d",
+                             db_options['host'], db_options['port'], e.msg, e.sqlstate, e.errno)
+            raise e
         except Exception as e:
-            self.log_message("Cannot connect to {}:{} MySQL db: {}", db_options['host'], db_options['port'], e)
+            self.log_message("Cannot connect to %s:%d MySQL db: %s", db_options['host'], db_options['port'], str(e))
             raise e
 
         self.log_message(
@@ -246,16 +250,13 @@ class ApiWebServer(HTTPServer):
 
         Copied almost bit-to-bit from http.server.BaseHTTPRequestHandler.log_message
 
-        The first argument, FORMAT, is a format string for the
+        The first argument, format_str, is a format string for the
         message to be logged.  If the format string contains
-        any % escapes requiring parameters, they should be
-        specified as subsequent arguments (it's just like
-        printf!).
+        % (%d, %s, %f...) escape codes, the corresponding parameters should be
+        specified as subsequent arguments (just like printf()).
 
-        The client ip and current date/time are prefixed to
-        every message.
+        The client ip and current date/time are prepended to the message.
         """
-
         sys.stderr.write(f"{self.server_name} [{self.log_date_time_string()}] {format_str % args}\n")
 
 
